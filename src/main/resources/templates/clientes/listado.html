@@ -27,8 +27,7 @@
 
 			<div class="card-body">
 
-				<div th:if="${mensaje}" class="alert alert-success" th:text="${mensaje}">
-				</div>
+
 
 				<a th:href="@{/clientes/nuevo}" class="btn btn-success mb-3">
 					Registrar nuevo cliente
@@ -109,6 +108,10 @@
 			</div>
 		</div>
 	</div>
+
+	<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+	<div th:if="${alert}" th:utext="${alert}"></div>
 
 </body>
 

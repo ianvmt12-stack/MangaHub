@@ -1,12 +1,12 @@
 package com.cibertec.mangahub.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
@@ -16,34 +16,48 @@ import com.cibertec.mangahub.repository.EditorialRepository;
 import com.cibertec.mangahub.repository.GeneroRepository;
 import com.cibertec.mangahub.repository.ProveedorRepository;
 import com.cibertec.mangahub.service.MangaService;
+import com.cibertec.mangahub.util.Alert;
+
+import jakarta.servlet.http.HttpSession;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 
 @Controller
+@RequestMapping("/mangas")
+@RequiredArgsConstructor
 public class MangaController {
 
-	@Autowired
-	private MangaService mangaService;
+	private final MangaService mangaService;
+	private final EditorialRepository editorialRepository;
+	private final GeneroRepository generoRepository;
+	private final ProveedorRepository proveedorRepository;
 
-	@Autowired
-	private EditorialRepository editorialRepository;
+	private boolean esAdmin(HttpSession session) {
+		return "ADMIN".equals(session.getAttribute("rol"));
+	}
 
-	@Autowired
-	private GeneroRepository generoRepository;
-
-	@Autowired
-	private ProveedorRepository proveedorRepository;
-
-	// LISTAR MANGAS
-	@GetMapping("/mangas")
+	@GetMapping
 	public String listarMangas(@RequestParam(required = false) Integer idEditorial,
 			@RequestParam(required = false) Integer idGenero, @RequestParam(required = false) Integer idProveedor,
-			Model model) {
+			@RequestParam(defaultValue = "0") int pagina, Model model, HttpSession session) {
 
-		model.addAttribute("listaMangas", mangaService.listarMangas(idEditorial, idGenero, idProveedor));
+		if (session.getAttribute("usuario") == null) {
+			return "redirect:/login";
+		}
+
+		if (pagina < 0) {
+			return "redirect:/mangas";
+		}
+
+		Page<Manga> resultado = mangaService.listarMangas(idEditorial, idGenero, idProveedor, pagina);
+
+		model.addAttribute("listaMangas", resultado.getContent());
+		model.addAttribute("paginaActual", pagina);
+		model.addAttribute("totalPaginas", resultado.getTotalPages());
+		model.addAttribute("totalElementos", resultado.getTotalElements());
 
 		model.addAttribute("listaEditoriales", editorialRepository.findAll());
-
 		model.addAttribute("listaGeneros", generoRepository.findAll());
-
 		model.addAttribute("listaProveedores", proveedorRepository.findAll());
 
 		model.addAttribute("idEditorial", idEditorial);
@@ -53,24 +67,27 @@ public class MangaController {
 		return "mangas/listado";
 	}
 
-	// MOSTRAR FORMULARIO NUEVO MANGA
-	@GetMapping("/mangas/nuevo")
-	public String nuevoManga(Model model) {
+	@GetMapping("/nuevo")
+	public String nuevoManga(Model model, HttpSession session) {
+
+		if (!esAdmin(session)) {
+			return "redirect:/mangas";
+		}
 
 		model.addAttribute("manga", new MangaDTO());
-
 		model.addAttribute("listaEditoriales", editorialRepository.findAll());
-
 		model.addAttribute("listaGeneros", generoRepository.findAll());
-
 		model.addAttribute("listaProveedores", proveedorRepository.findAll());
 
 		return "mangas/nuevo";
 	}
 
-	// GUARDAR NUEVO MANGA
-	@PostMapping("/mangas/guardar")
-	public String guardarManga(@ModelAttribute("manga") MangaDTO dto, RedirectAttributes redirectAttributes) {
+	@PostMapping("/guardar")
+	public String guardarManga(@ModelAttribute("manga") MangaDTO dto, RedirectAttributes flash, HttpSession session) {
+
+		if (!esAdmin(session)) {
+			return "redirect:/mangas";
+		}
 
 		Manga manga = new Manga();
 
@@ -87,19 +104,21 @@ public class MangaController {
 
 		manga.setProveedor(proveedorRepository.findById(dto.getIdProveedor()).orElseThrow());
 
-		mangaService.guardar(manga);
+		var response = mangaService.guardar(manga);
 
-		redirectAttributes.addFlashAttribute("mensaje", "Manga registrado correctamente");
+		flash.addFlashAttribute("alert", Alert.sweetToast(response.mensaje(), "success", 5000));
 
 		return "redirect:/mangas";
 	}
 
-	// MOSTRAR FORMULARIO EDITAR MANGA
-	@GetMapping("/mangas/editar/{id}")
-	public String editarManga(@PathVariable Integer id, Model model) {
+	@GetMapping("/editar/{id}")
+	public String editarManga(@PathVariable Integer id, Model model, HttpSession session) {
+
+		if (!esAdmin(session)) {
+			return "redirect:/mangas";
+		}
 
 		Manga manga = mangaService.buscarPorId(id);
-
 		MangaDTO dto = new MangaDTO();
 
 		dto.setTitulo(manga.getTitulo());
@@ -109,27 +128,26 @@ public class MangaController {
 		dto.setStock(manga.getStock());
 
 		dto.setIdEditorial(manga.getEditorial().getIdEditorial());
-
 		dto.setIdGenero(manga.getGenero().getIdGenero());
-
 		dto.setIdProveedor(manga.getProveedor().getIdProveedor());
 
 		model.addAttribute("manga", dto);
 		model.addAttribute("idManga", manga.getIdManga());
 
 		model.addAttribute("listaEditoriales", editorialRepository.findAll());
-
 		model.addAttribute("listaGeneros", generoRepository.findAll());
-
 		model.addAttribute("listaProveedores", proveedorRepository.findAll());
 
 		return "mangas/editar";
 	}
 
-	// ACTUALIZAR MANGA
-	@PostMapping("/mangas/actualizar/{id}")
+	@PostMapping("/actualizar/{id}")
 	public String actualizarManga(@PathVariable Integer id, @ModelAttribute("manga") MangaDTO dto,
-			RedirectAttributes redirectAttributes) {
+			RedirectAttributes flash, HttpSession session) {
+
+		if (!esAdmin(session)) {
+			return "redirect:/mangas";
+		}
 
 		Manga manga = mangaService.buscarPorId(id);
 
@@ -145,33 +163,38 @@ public class MangaController {
 
 		manga.setProveedor(proveedorRepository.findById(dto.getIdProveedor()).orElseThrow());
 
-		mangaService.guardar(manga);
+		var response = mangaService.guardar(manga);
 
-		redirectAttributes.addFlashAttribute("mensaje", "Manga actualizado correctamente");
-
-		return "redirect:/mangas";
-	}
-
-	// DESACTIVA EL MANGAAAAAAAA
-	@PostMapping("/mangas/desactivar/{id}")
-	public String desactivarManga(@PathVariable Integer id, RedirectAttributes redirectAttributes) {
-
-		mangaService.desactivar(id);
-
-		redirectAttributes.addFlashAttribute("mensaje", "Manga desactivado correctamente");
+		flash.addFlashAttribute("alert", Alert.sweetToast(response.mensaje(), "success", 5000));
 
 		return "redirect:/mangas";
 	}
 
-	// ACTIVA EL MANGAAAAAAAAA
-	@PostMapping("/mangas/activar/{id}")
-	public String activarManga(@PathVariable Integer id, RedirectAttributes redirectAttributes) {
+	@PostMapping("/desactivar/{id}")
+	public String desactivarManga(@PathVariable Integer id, RedirectAttributes flash, HttpSession session) {
 
-		mangaService.activar(id);
+		if (!esAdmin(session)) {
+			return "redirect:/mangas";
+		}
 
-		redirectAttributes.addFlashAttribute("mensaje", "Manga activado correctamente");
+		var response = mangaService.desactivar(id);
+
+		flash.addFlashAttribute("alert", Alert.sweetToast(response.mensaje(), "success", 5000));
 
 		return "redirect:/mangas";
 	}
 
+	@PostMapping("/activar/{id}")
+	public String activarManga(@PathVariable Integer id, RedirectAttributes flash, HttpSession session) {
+
+		if (!esAdmin(session)) {
+			return "redirect:/mangas";
+		}
+
+		var response = mangaService.activar(id);
+
+		flash.addFlashAttribute("alert", Alert.sweetToast(response.mensaje(), "success", 5000));
+
+		return "redirect:/mangas";
+	}
 }
