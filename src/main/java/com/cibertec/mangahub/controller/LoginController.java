@@ -1,4 +1,3 @@
-
 package com.cibertec.mangahub.controller;
 
 import org.springframework.stereotype.Controller;
@@ -37,6 +36,7 @@ public class LoginController {
 
 		if (usuario != null) {
 
+			session.setAttribute("idUsuario", usuario.getIdUsuario());
 			session.setAttribute("usuario", usuario.getNombres());
 			session.setAttribute("rol", usuario.getRol());
 
